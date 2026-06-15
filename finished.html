@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ConvertTLA - Setup Complete</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --bg-light: #1e293b;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: radial-gradient(circle at center, var(--bg-light), var(--bg-dark));
+            font-family: 'Inter', sans-serif;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        /* Canvas for the rainbow sparks */
+        #sparkCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* Central content wrapper */
+        .content {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        /* --- Emoji Styling & Animations --- */
+        #emoji {
+            font-size: 6rem;
+            opacity: 0;
+            transform: scale(0);
+            margin-bottom: 20px;
+        }
+
+        /* Phase 1: The massive burst */
+        .burst {
+            animation: popIn 1s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        /* Phase 2: Shrink and glide up */
+        .shrink-up {
+            animation: shrinkAndGlide 1.2s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+        }
+
+        @keyframes popIn {
+            0% { opacity: 0; transform: scale(0); }
+            50% { opacity: 1; transform: scale(1.5); }
+            100% { opacity: 1; transform: scale(1.2); }
+        }
+
+        @keyframes shrinkAndGlide {
+            0% { opacity: 1; transform: scale(1.2) translateY(0); }
+            100% { opacity: 1; transform: scale(0.6) translateY(-50px); }
+        }
+
+        /* --- Text & Button Styling --- */
+        #title {
+            font-size: 3rem;
+            font-weight: 800;
+            margin: 0 0 15px 0;
+            background: linear-gradient(135deg, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            min-height: 1.2em; /* Prevents layout shift while typing */
+        }
+
+        #subtitle {
+            font-size: 1.15rem;
+            line-height: 1.6;
+            color: var(--text-muted);
+            max-width: 450px;
+            margin: 0 0 40px 0;
+            opacity: 0;
+            transform: translateY(20px);
+            filter: blur(4px);
+        }
+
+        #continue-btn {
+            padding: 16px 36px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: white;
+            background: var(--accent);
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            opacity: 0;
+            transform: translateY(30px);
+            box-shadow: 0 10px 25px rgba(59, 130, 246, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        #continue-btn:hover {
+            background: var(--accent-hover);
+            transform: translateY(-3px) scale(1.05) !important;
+            box-shadow: 0 15px 35px rgba(59, 130, 246, 0.5);
+        }
+
+        /* Reusable smooth fade-in morph class */
+        .fade-in-morph {
+            animation: morphIn 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes morphIn {
+            0% { opacity: 0; transform: translateY(20px); filter: blur(4px); }
+            100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="sparkCanvas"></canvas>
+
+    <div class="content">
+        <div id="emoji">🎉</div>
+        <h1 id="title"></h1>
+        <p id="subtitle">You've installed ConvertTLA! Welcome to the fastest non-command line based conversion. Congrats!</p>
+        <button id="continue-btn" onclick="closeTab()">Continue to app</button>
+    </div>
+
+    <script>
+        // --- 1. Animation Sequence Controller ---
+        document.addEventListener("DOMContentLoaded", () => {
+            const emoji = document.getElementById("emoji");
+            const subtitle = document.getElementById("subtitle");
+            const btn = document.getElementById("continue-btn");
+
+            // T=0.5s: Emoji bursts in + Sparks explode
+            setTimeout(() => {
+                emoji.classList.add("burst");
+                fireSparks();
+            }, 500);
+
+            // T=2.2s: Emoji smoothly shrinks and glides up
+            setTimeout(() => {
+                emoji.classList.replace("burst", "shrink-up");
+            }, 2200);
+
+            // T=3.0s: Typewriter starts for the title
+            setTimeout(() => {
+                typeWriter("You're all done.", "title", 60);
+            }, 3000);
+
+            // T=4.2s: Paragraph gently morphs in
+            setTimeout(() => {
+                subtitle.classList.add("fade-in-morph");
+            }, 4200);
+
+            // T=4.6s: Button smoothly glides in
+            setTimeout(() => {
+                btn.classList.add("fade-in-morph");
+                // Set final transform explicitly so hover effects work cleanly after animation
+                setTimeout(() => { btn.style.transform = "translateY(0)"; }, 1200); 
+            }, 4600);
+        });
+
+        // --- 2. Typewriter Effect ---
+        function typeWriter(text, elementId, speed) {
+            let i = 0;
+            const element = document.getElementById(elementId);
+            element.innerHTML = ""; // Clear initial state
+            
+            function type() {
+                if (i < text.length) {
+                    element.innerHTML += text.charAt(i);
+                    i++;
+                    setTimeout(type, speed);
+                }
+            }
+            type();
+        }
+
+        // --- 3. Tab Closer ---
+        function closeTab() {
+            // Note: Modern browsers block window.close() unless the script actually opened the window.
+            // If it fails, we fall back to a clean exit message.
+            try {
+                window.close();
+            } catch (e) {}
+            
+            // Fallback UX if browser blocks the close request
+            document.body.innerHTML = "<div style='text-align:center; color:#94a3b8; font-family:Inter,sans-serif;'><h2>You may now close this tab.</h2></div>";
+        }
+
+        // --- 4. Custom Rainbow Spark Particle System ---
+        const canvas = document.getElementById('sparkCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let particles = [];
+        const colors = ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF', '#4B0082', '#9400D3', '#FF1493', '#00FFFF'];
+
+        class Particle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                // Random velocity in all directions (explosion)
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 15 + 5;
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                // Random rainbow color
+                this.color = colors[Math.floor(Math.random() * colors.length)];
+                this.size = Math.random() * 6 + 3;
+                this.alpha = 1;
+                this.decay = Math.random() * 0.015 + 0.01;
+                this.gravity = 0.2;
+                this.friction = 0.96;
+            }
+
+            update() {
+                this.vx *= this.friction;
+                this.vy *= this.friction;
+                this.vy += this.gravity;
+                this.x += this.vx;
+                this.y += this.vy;
+                this.alpha -= this.decay;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.alpha;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                // Add a soft glow to the sparks
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = this.color;
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        function fireSparks() {
+            const centerX = canvas.width / 2;
+            // Center Y offset slightly upwards to match emoji placement
+            const centerY = canvas.height / 2 - 50; 
+            
+            // Create 150 sparks
+            for (let i = 0; i < 150; i++) {
+                particles.push(new Particle(centerX, centerY));
+            }
+            animateSparks();
+        }
+
+        function animateSparks() {
+            // Clear frame with a slight trailing effect
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            let stillAlive = false;
+            particles.forEach(p => {
+                if (p.alpha > 0) {
+                    p.update();
+                    p.draw();
+                    stillAlive = true;
+                }
+            });
+
+            if (stillAlive) {
+                requestAnimationFrame(animateSparks);
+            }
+        }
+
+        // Handle window resize dynamically
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+    </script>
+</body>
+</html>
