@@ -3,6 +3,9 @@ from tkinter import filedialog, messagebox
 import subprocess
 import threading
 import os
+import sys
+import json
+import winreg
 
 # Safely try to import drag-and-drop functionality
 try:
@@ -11,11 +14,10 @@ try:
 except ImportError:
     DND_AVAILABLE = False
 
-# --- UI Theme Configuration ---
-ctk.set_appearance_mode("Dark")  # Options: "System", "Dark", "Light"
-ctk.set_default_color_theme("blue")  # Options: "blue", "green", "dark-blue"
+# --- UI Theme Configuration (Defaults) ---
+ctk.set_appearance_mode("Dark")  # Will be overridden by config.json if present
+ctk.set_default_color_theme("blue")
 
-# Create a hybrid root class that supports both CustomTkinter and TkinterDnD
 if DND_AVAILABLE:
     class CTkDnD(ctk.CTk, TkinterDnD.DnDWrapper):
         def __init__(self, *args, **kwargs):
@@ -32,27 +34,83 @@ class MediaConverterApp:
         self.root.title("ConvertTLA")
         self.root.geometry("750x700")
         
-        # Apply the favicon to the window and taskbar
+        self.script_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Apply the favicon
         try:
-            self.root.iconbitmap("favicon.ico")
+            self.root.iconbitmap(os.path.join(self.script_dir, "favicon.ico"))
         except Exception:
-            pass # Fails gracefully if favicon.ico is not in the directory
+            pass 
 
         # Application State
         self.input_files = []
-        self.file_checkboxes = []  # To track UI checkbox widgets
+        self.file_checkboxes = []  
         self.output_format = ctk.StringVar(value="mp4")
         self.advanced_format = ctk.StringVar(value="mkv")
         
         # Advanced Settings State
-        self.video_crf = ctk.IntVar(value=23) # Default CRF
-        self.audio_bitrate = ctk.IntVar(value=192) # Default 192k
+        self.video_crf = ctk.IntVar(value=23) 
+        self.audio_bitrate = ctk.IntVar(value=192) 
         
         # Custom Path State
         self.use_custom_folder = ctk.BooleanVar(value=False)
         self.custom_folder_path = ctk.StringVar(value="")
+        
+        # Hardware Acceleration State
+        self.hw_accel_enabled = False
 
         self.create_widgets()
+        self.load_configuration()
+        self.handle_context_menu_args()
+
+    def load_configuration(self):
+        """Reads config.json and applies user preferences."""
+        config_path = os.path.join(self.script_dir, "config.json")
+        if not os.path.exists(config_path):
+            return # Skip if onboarding hasn't been run
+
+        try:
+            with open(config_path, "r") as f:
+                config = json.load(f)
+
+            # 1. Apply Theme
+            theme = config.get("theme", "System")
+            ctk.set_appearance_mode(theme)
+
+            # 2. Apply Hardware Acceleration
+            self.hw_accel_enabled = config.get("hardware_acceleration", False)
+
+            # 3. Apply Save Location Preferences
+            save_loc = config.get("save_location", "Source Folder")
+            if save_loc == "Desktop":
+                self.use_custom_folder.set(True)
+                try:
+                    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders") as key:
+                        desktop = os.path.expandvars(winreg.QueryValueEx(key, "Desktop")[0])
+                except Exception:
+                    desktop = os.path.join(os.environ["USERPROFILE"], "Desktop")
+                self.custom_folder_path.set(desktop)
+                
+            elif save_loc == "Custom Folder...":
+                self.use_custom_folder.set(True)
+                self.custom_folder_path.set(config.get("custom_path", ""))
+                
+            else:
+                self.use_custom_folder.set(False)
+
+            # Sync UI elements with loaded state
+            self.toggle_custom_folder()
+
+        except Exception as e:
+            self.log_message(f"Notice: Failed to load config.json properly. {str(e)}\n")
+
+    def handle_context_menu_args(self):
+        """Processes files passed in via Windows Right-Click Context Menu."""
+        if len(sys.argv) > 1:
+            for file_path in sys.argv[1:]:
+                if os.path.exists(file_path):
+                    self.add_file_to_ui(file_path)
+            self.log_message(f"Loaded {len(sys.argv)-1} file(s) from Windows Context Menu.\n")
 
     def create_widgets(self):
         # --- Title ---
@@ -65,7 +123,6 @@ class MediaConverterApp:
 
         ctk.CTkLabel(file_frame, text="Input Files (Drag & Drop anywhere to add):", font=ctk.CTkFont(weight="bold")).pack(anchor=ctk.W, padx=10, pady=5)
         
-        # Modern Scrollable Frame for files (replaces Listbox)
         self.scroll_frame = ctk.CTkScrollableFrame(file_frame, height=150)
         self.scroll_frame.pack(side=ctk.LEFT, fill=ctk.BOTH, expand=True, padx=10, pady=10)
 
@@ -77,7 +134,6 @@ class MediaConverterApp:
         ctk.CTkButton(btn_frame, text="Remove Checked", command=self.remove_selected, fg_color="#E74C3C", hover_color="#C0392B").pack(pady=5)
         ctk.CTkButton(btn_frame, text="Clear All", command=self.clear_files, fg_color="#34495E", hover_color="#2C3E50").pack(pady=5)
 
-        # Enable Drag and Drop globally on the root window
         if DND_AVAILABLE:
             self.root.drop_target_register(DND_FILES)
             self.root.dnd_bind('<<Drop>>', self.handle_drop)
@@ -90,16 +146,13 @@ class MediaConverterApp:
 
         ctk.CTkLabel(format_frame, text="Target Format:", font=ctk.CTkFont(weight="bold")).pack(side=ctk.LEFT, padx=10, pady=10)
         
-        # Advanced esoterics
         self.all_formats = ["mkv", "webm", "mov", "gif", "aac", "flac", "ogg", "m4a", "jpeg", "webp", "ico", "bmp", "tiff"]
         
         self.main_combo = ctk.CTkComboBox(format_frame, variable=self.output_format, command=self.on_format_change, state="readonly")
         self.main_combo.pack(side=ctk.LEFT, padx=5)
 
-        # Advanced Dropdown (Hidden by default)
         self.adv_combo = ctk.CTkComboBox(format_frame, values=self.all_formats, variable=self.advanced_format, state="readonly")
         
-        # Advanced Settings Window Trigger
         self.adv_settings_btn = ctk.CTkButton(format_frame, text="⚙️ Advanced Options", width=140, command=self.open_advanced_settings, fg_color="#5D6D7E", hover_color="#34495E")
         self.adv_settings_btn.pack(side=ctk.RIGHT, padx=10, pady=10)
 
@@ -136,7 +189,6 @@ class MediaConverterApp:
         self.log_text = ctk.CTkTextbox(log_frame, state=ctk.DISABLED, text_color="#00FF00", fg_color="#1E1E1E", font=ctk.CTkFont(family="Consolas", size=11))
         self.log_text.pack(fill=ctk.BOTH, expand=True, padx=10, pady=10)
 
-        # Initialize the dynamic dropdown options
         self.update_dropdown_options()
 
     # --- UI Logic ---
@@ -163,10 +215,9 @@ class MediaConverterApp:
         top.geometry("400x320")
         top.attributes("-topmost", True)
         try:
-            top.iconbitmap("favicon.ico")
+            top.iconbitmap(os.path.join(self.script_dir, "favicon.ico"))
         except: pass
         
-        # Video Quality Slider
         ctk.CTkLabel(top, text="Video Quality (CRF)", font=ctk.CTkFont(weight="bold", size=14)).pack(pady=(20, 0))
         ctk.CTkLabel(top, text="Lower value = Better Quality, Larger File (Default: 23)", text_color="gray", font=ctk.CTkFont(size=11)).pack(pady=0)
         
@@ -181,7 +232,6 @@ class MediaConverterApp:
         crf_slider.set(self.video_crf.get())
         crf_slider.pack(pady=(0, 20), padx=30, fill=ctk.X)
 
-        # Audio Bitrate Slider
         ctk.CTkLabel(top, text="Audio Bitrate (kbps)", font=ctk.CTkFont(weight="bold", size=14)).pack(pady=(10, 0))
         ctk.CTkLabel(top, text="Higher value = Better Audio (Default: 192 kbps)", text_color="gray", font=ctk.CTkFont(size=11)).pack(pady=0)
         
@@ -192,7 +242,6 @@ class MediaConverterApp:
             self.audio_bitrate.set(int(val))
             abr_val_label.configure(text=f"{int(val)} kbps")
 
-        # Stepped slider for common bitrates: 64, 96, 128, 160, 192, 224, 256, 320
         abr_slider = ctk.CTkSlider(top, from_=64, to=320, number_of_steps=8, command=update_abr_label)
         abr_slider.set(self.audio_bitrate.get())
         abr_slider.pack(pady=(0, 10), padx=30, fill=ctk.X)
@@ -338,7 +387,6 @@ class MediaConverterApp:
 
             base_name = os.path.splitext(os.path.basename(input_path))[0]
             
-            # Determine save path based on Custom Location state
             if self.use_custom_folder.get() and self.custom_folder_path.get():
                 output_dir = self.custom_folder_path.get()
             else:
@@ -346,7 +394,13 @@ class MediaConverterApp:
                 
             output_path = os.path.join(output_dir, f"{base_name}_converted.{output_ext}")
 
-            cmd = ["ffmpeg", "-y", "-i", input_path]
+            cmd = ["ffmpeg", "-y"]
+            
+            # Smart Hardware Acceleration Injection
+            if self.hw_accel_enabled:
+                cmd.extend(["-hwaccel", "auto"])
+                
+            cmd.extend(["-i", input_path])
             
             # Smart flags application
             if output_ext == "ico":
@@ -354,7 +408,6 @@ class MediaConverterApp:
             elif output_ext in ["mp4", "mkv", "webm", "mov", "avi"]:
                 cmd.extend(["-crf", str(self.video_crf.get())])
                 
-            # Apply audio bitrate if the format supports it (lossy audio and video formats)
             if output_ext in ["mp4", "mkv", "webm", "mov", "avi", "mp3", "aac", "ogg", "m4a"]:
                 cmd.extend(["-b:a", f"{self.audio_bitrate.get()}k"])
                 
