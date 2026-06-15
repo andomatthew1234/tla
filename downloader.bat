@@ -6,21 +6,30 @@ echo ===================================================
 echo             ConvertTLA - Downloading
 echo ===================================================
 
+:: --- DYNAMIC DESKTOP DETECTION ---
+echo [+] Detecting active Desktop location (Local/OneDrive)...
+for /f "tokens=2*" %%A in ('reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders" /v Desktop 2^>nul') do (
+    set "RAW_DESKTOP=%%B"
+)
+:: Expand variables like %USERPROFILE% if they are returned by the registry
+call set "DESKTOP_DIR=%RAW_DESKTOP%"
+
+echo [+] Target Desktop identified: %DESKTOP_DIR%
+
 :: Define URLs and Paths
 set "REPO_ZIP_URL=https://github.com/andomatthew1234/tla/archive/refs/heads/main.zip"
-set "DESKTOP_DIR=%USERPROFILE%\Desktop"
 set "ZIP_FILE=%TEMP%\ConvertTLA_Latest.zip"
 set "EXTRACT_DIR=%DESKTOP_DIR%\ConvertTLA"
 
 echo [+] Downloading latest ConvertTLA bundle from GitHub...
-curl -L -s -o "%ZIP_FILE%" "%REPO_ZIP_URL%"
+powershell -Command "Invoke-WebRequest -Uri '%REPO_ZIP_URL%' -OutFile '%ZIP_FILE%'"
 if %ERRORLEVEL% neq 0 (
     echo [!] CRITICAL: Failed to download the zip file. Check your internet connection.
     pause
     exit /b
 )
 
-echo [+] Extracting archive directly to Desktop...
+echo [+] Extracting archive directly to active Desktop...
 if exist "%EXTRACT_DIR%" rmdir /s /q "%EXTRACT_DIR%"
 powershell -Command "Expand-Archive -Path '%ZIP_FILE%' -DestinationPath '%EXTRACT_DIR%' -Force"
 

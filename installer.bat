@@ -3,7 +3,7 @@ setlocal enabledelayedexpansion
 title ConvertTLA Installer
 
 echo ===================================================
-echo             ConvertTLA - Installing
+echo             ConvertTLA - System Installer
 echo ===================================================
 
 :: Check if Python is globally installed
